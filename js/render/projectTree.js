@@ -4,6 +4,7 @@ import { createFolder, createTask, deleteNodeRecursive } from "../nodesRepo.js";
 import { promptText, confirmDialog } from "./modal.js";
 
 const collapsedByProject = new Map();
+const showCompletedByProject = new Map();
 
 export function renderProjectTree(container, ctx) {
   const { uid, project, nodes, userDoc, tasksById, onBack, onDeleted } = ctx;
@@ -12,8 +13,15 @@ export function renderProjectTree(container, ctx) {
 
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
   const childrenOf = (parentId) => nodes.filter((n) => n.parentId === parentId);
+  const visibleChildrenOf = (parentId) => {
+    const showCompleted = showCompletedByProject.get(project.id) || false;
+    return childrenOf(parentId).filter((n) => showCompleted || n.type !== "task" || !n.completed);
+  };
 
   function draw() {
+    const showCompleted = showCompletedByProject.get(project.id) || false;
+    const completedCount = nodes.filter((n) => n.type === "task" && n.completed).length;
+
     container.innerHTML = `
       <div class="project-view">
         <button type="button" id="back-btn" class="btn btn-ghost btn-small">&larr; All projects</button>
@@ -25,8 +33,9 @@ export function renderProjectTree(container, ctx) {
             <button type="button" class="btn btn-small btn-danger" id="delete-project-btn">Delete project</button>
           </div>
         </div>
+        ${completedCount ? `<button type="button" class="btn btn-ghost btn-small" id="toggle-completed-btn">${showCompleted ? "Hide" : "Show"} completed (${completedCount})</button>` : ""}
         <div class="tree-root">
-          ${childrenOf(project.id).map((n) => renderNode(n, 0)).join("") || `<p class="empty-hint">Nothing here yet. Add a sub-folder or a task.</p>`}
+          ${visibleChildrenOf(project.id).map((n) => renderNode(n, 0)).join("") || `<p class="empty-hint">Nothing here yet. Add a sub-folder or a task.</p>`}
         </div>
       </div>
     `;
@@ -34,6 +43,13 @@ export function renderProjectTree(container, ctx) {
     container.querySelector("#back-btn").addEventListener("click", onBack);
     container.querySelector("#add-subfolder-root").addEventListener("click", () => addFolder(project.id));
     container.querySelector("#add-task-root").addEventListener("click", () => addTask(project.id));
+    const toggleBtn = container.querySelector("#toggle-completed-btn");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        showCompletedByProject.set(project.id, !showCompleted);
+        draw();
+      });
+    }
     container.querySelector("#delete-project-btn").addEventListener("click", async () => {
       const ok = await confirmDialog(`Delete the entire "${project.name}" project and everything inside it? This can't be undone.`);
       if (!ok) return;
@@ -53,7 +69,7 @@ export function renderProjectTree(container, ctx) {
 
   function renderFolder(node, depth) {
     const isCollapsed = collapsed.has(node.id);
-    const kids = childrenOf(node.id);
+    const kids = visibleChildrenOf(node.id);
     return `
       <div class="tree-folder" style="--depth:${depth}">
         <div class="tree-folder-header">

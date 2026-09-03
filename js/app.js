@@ -13,6 +13,7 @@ import { renderProjectTree } from "./render/projectTree.js";
 import { renderReminders } from "./render/reminderBanner.js";
 import { findDueReminders } from "./reminders.js";
 import { promptText } from "./render/modal.js";
+import { escapeHtml } from "./utils.js";
 
 const app = document.getElementById("app");
 
@@ -113,16 +114,35 @@ function render() {
     return;
   }
 
+  const outstandingByProject = new Map();
+  state.allTasks.forEach((t) => {
+    if (t.completed) return;
+    outstandingByProject.set(t.projectId, (outstandingByProject.get(t.projectId) || 0) + 1);
+  });
+  const isDashboard = state.view !== "project";
+
   app.innerHTML = `
     <div class="app-shell">
       <header class="app-header">
         <span class="brand-small">Project Overview</span>
-        <div class="header-actions">
-          <button type="button" id="new-project-btn" class="btn btn-small btn-secondary">+ New project</button>
-          <button type="button" id="sign-out-btn" class="btn btn-small btn-ghost">Sign out</button>
-        </div>
+        <button type="button" id="sign-out-btn" class="btn btn-small btn-ghost">Sign out</button>
       </header>
-      <main id="main-content"></main>
+      <div class="app-body">
+        <aside class="sidebar">
+          <button type="button" id="new-project-btn" class="btn btn-secondary btn-small btn-block">+ New project</button>
+          <button type="button" class="sidebar-link ${isDashboard ? "active" : ""}" id="sidebar-dashboard-link">🏠 Dashboard</button>
+          <div class="sidebar-section-label">Projects</div>
+          <nav class="sidebar-projects">
+            ${state.rootProjects.map((p) => `
+              <button type="button" class="sidebar-link ${p.id === state.currentProjectId ? "active" : ""}" data-project-id="${p.id}">
+                <span class="sidebar-link-name">${escapeHtml(p.name)}</span>
+                ${outstandingByProject.get(p.id) ? `<span class="sidebar-count">${outstandingByProject.get(p.id)}</span>` : ""}
+              </button>
+            `).join("") || `<p class="empty-hint sidebar-empty-hint">No projects yet.</p>`}
+          </nav>
+        </aside>
+        <main id="main-content"></main>
+      </div>
     </div>
   `;
 
@@ -133,6 +153,10 @@ function render() {
     navigateToProject(id);
   });
   document.getElementById("sign-out-btn").addEventListener("click", () => signOutUser());
+  document.getElementById("sidebar-dashboard-link").addEventListener("click", backToDashboard);
+  document.querySelectorAll(".sidebar-projects .sidebar-link").forEach((btn) => {
+    btn.addEventListener("click", () => navigateToProject(btn.dataset.projectId));
+  });
 
   const main = document.getElementById("main-content");
 
@@ -161,7 +185,6 @@ function render() {
       userDoc: state.userDoc,
       allTasks: state.allTasks,
       rootProjects: state.rootProjects,
-      onNavigateProject: navigateToProject,
     });
   }
 }

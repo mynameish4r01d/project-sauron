@@ -4,7 +4,7 @@ import { openModal, closeModal } from "./modal.js";
 import { updateUserDoc } from "../nodesRepo.js";
 
 export function renderDashboard(container, ctx) {
-  const { uid, userDoc, allTasks, rootProjects, onNavigateProject } = ctx;
+  const { uid, userDoc, allTasks, rootProjects } = ctx;
   const projectsById = new Map(rootProjects.map((p) => [p.id, p]));
   const tasksById = new Map(allTasks.map((t) => [t.id, t]));
 
@@ -17,19 +17,14 @@ export function renderDashboard(container, ctx) {
 
   const deadlineSoon = outstanding.filter((t) => t.deadline && t.deadline - Date.now() <= 7 * 24 * 60 * 60 * 1000).length;
 
-  const perProject = rootProjects.map((p) => ({
-    project: p,
-    count: outstanding.filter((t) => t.projectId === p.id).length,
-  }));
-
   container.innerHTML = `
     <div class="dashboard">
       <section class="progress-panel">
         <div class="progress-header">
-          <div>
+          <button type="button" id="points-summary-btn" class="points-summary-trigger">
             <div class="lifetime-points">${userDoc.lifetimePoints || 0}</div>
             <div class="lifetime-label">lifetime points</div>
-          </div>
+          </button>
           <button type="button" id="edit-rewards-btn" class="btn btn-ghost btn-small">Edit rewards</button>
         </div>
         <div class="progress-bar-track">
@@ -64,18 +59,6 @@ export function renderDashboard(container, ctx) {
         <h2>Priority &amp; urgent</h2>
         ${spotlight.length ? `<div class="task-list">${spotlight.map((t) => taskRow(t, projectsById, userDoc.currentTaskId)).join("")}</div>` : `<p class="empty-hint">Nothing flagged as priority or urgent right now.</p>`}
       </section>
-
-      <section class="projects-overview">
-        <h2>All projects</h2>
-        <div class="project-summary-list">
-          ${perProject.map((p) => `
-            <button type="button" class="project-summary-row" data-project-id="${p.project.id}">
-              <span class="project-summary-name">${escapeHtml(p.project.name)}</span>
-              <span class="project-summary-count">${p.count} outstanding</span>
-            </button>
-          `).join("") || `<p class="empty-hint">No projects yet. Create one to get started.</p>`}
-        </div>
-      </section>
     </div>
   `;
 
@@ -95,11 +78,8 @@ export function renderDashboard(container, ctx) {
     });
   });
 
-  container.querySelectorAll(".project-summary-row").forEach((row) => {
-    row.addEventListener("click", () => onNavigateProject(row.dataset.projectId));
-  });
-
   container.querySelector("#edit-rewards-btn").addEventListener("click", () => openRewardsEditor(uid, userDoc.rewardTiers));
+  container.querySelector("#points-summary-btn").addEventListener("click", () => openPointsSummary(userDoc, allTasks));
 }
 
 function spotlightSort(a, b) {
@@ -129,6 +109,43 @@ function taskRow(t, projectsById, currentTaskId) {
       ${!t.completed ? `<button type="button" class="btn btn-small task-start-btn" data-id="${t.id}">${isCurrent ? "In progress" : "Start"}</button>` : ""}
     </div>
   `;
+}
+
+function openPointsSummary(userDoc, allTasks) {
+  const completed = allTasks.filter((t) => t.completed);
+  const priorityCompleted = completed.filter((t) => t.priority).length;
+  const regularCompleted = completed.length - priorityCompleted;
+  const lifetimePoints = userDoc.lifetimePoints || 0;
+  const tiers = [...(userDoc.rewardTiers || [])].sort((a, b) => a.threshold - b.threshold);
+
+  openModal(`
+    <h2>Your points</h2>
+    <div class="points-summary-total">${lifetimePoints} <span>lifetime points</span></div>
+
+    <h3 class="points-summary-heading">Tasks accomplished</h3>
+    <div class="points-summary-stats">
+      <div class="points-summary-stat"><strong>${completed.length}</strong><span>total completed</span></div>
+      <div class="points-summary-stat"><strong>${priorityCompleted}</strong><span>priority (2pt)</span></div>
+      <div class="points-summary-stat"><strong>${regularCompleted}</strong><span>regular (1pt)</span></div>
+    </div>
+
+    <h3 class="points-summary-heading">Rewards</h3>
+    <div class="tier-list">
+      ${tiers.length ? tiers.map((t) => {
+        const unlocked = lifetimePoints >= t.threshold;
+        return `
+          <div class="tier-row ${unlocked ? "tier-unlocked" : ""}">
+            <span class="tier-points">${t.threshold} pts</span>
+            <span class="tier-reward">${escapeHtml(t.reward)}</span>
+            <span class="tier-status">${unlocked ? "✓ Claimable" : `${t.threshold - lifetimePoints} to go`}</span>
+          </div>
+        `;
+      }).join("") : `<p class="empty-hint">No reward tiers set up yet.</p>`}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary btn-block" id="points-summary-close">Close</button>
+    </div>
+  `).querySelector("#points-summary-close").addEventListener("click", closeModal);
 }
 
 function openRewardsEditor(uid, currentTiers) {
