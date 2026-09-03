@@ -86,14 +86,14 @@ function tsMillis(ts) {
 }
 
 export async function createProject(uid, name) {
-  const ref = await addDoc(nodesCol(uid), {
+  const ref = doc(nodesCol(uid));
+  await setDoc(ref, {
     type: "folder",
     name,
     parentId: null,
-    projectId: null,
+    projectId: ref.id,
     createdAt: serverTimestamp(),
   });
-  await updateDoc(ref, { projectId: ref.id });
   return ref.id;
 }
 

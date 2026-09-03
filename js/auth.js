@@ -50,6 +50,8 @@ export function friendlyAuthError(err) {
     "auth/popup-closed-by-user": "Google sign-in was closed before finishing.",
     "auth/operation-not-allowed":
       "This sign-in method isn't enabled yet in the Firebase console (Authentication → Sign-in method).",
+    "auth/configuration-not-found":
+      "Sign-in isn't set up yet in the Firebase console — open Authentication → Get started, then enable Email/Password and Google.",
   };
   return map[code] || (err && err.message) || "Something went wrong. Please try again.";
 }
